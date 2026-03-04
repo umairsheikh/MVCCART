@@ -1,3 +1,50 @@
+MVCCART Concurrency Control - Simplified Summary
+1. Transactional Framework
+Each transaction in MVCCART is a single independent thread that executes concurrently with other transactions. Every transaction receives a unique ID that is atomically generated, allowing the system to track and coordinate multiple concurrent operations across the database.
+
+2. Readers: Lock-Free, Snapshot-Based
+Readers in MVCCART never acquire any locks; instead they simply load a snapshot of the data at a specific version and validate it after reading. This means readers cannot block writers or other readers, and writers cannot block readers, creating a truly non-blocking read experience.
+
+3. Writers: CAS-Based Lock Management
+Writers use Compare-and-Swap (CAS) atomic operations instead of traditional mutexes to acquire locks on tree nodes. CAS is a non-blocking atomic instruction that either succeeds in acquiring the lock or fails immediately, signaling the writer to restart rather than wait.
+
+4. Version Field Structure
+Each ART tree node contains a 64-bit atomic version field that encodes the lock state, obsolete flag, and version counter in specific bit positions. The lock bit indicates whether a node is currently locked by a writer, while the version counter increments each time a write completes, allowing readers to detect if data changed during their read.
+
+5. Successful Write Operation
+A writer first reads the current version of a node, then attempts a CAS operation to set the lock bit by changing the version from current value to current+2 (0b10). If the CAS succeeds, the writer acquires the lock, modifies the node data, and then releases the lock by incrementing the version again.
+
+6. CAS Failure and Restart
+If another writer has already modified a node between the time the first writer read the version and attempted the CAS, the CAS operation fails immediately and returns false. When CAS fails, the transaction sets a restart flag and begins again from the start, reading the new version and attempting to acquire the lock again with the updated version value.
+
+7. Reader vs Writer Interaction
+When a reader and writer access the same node, the reader loads the version without acquiring any lock and begins reading data. If the writer modifies the node during the reader's operation, the reader detects the version change during validation and gracefully restarts, allowing both operations to proceed without any blocking or waiting.
+
+8. Multi-Writer Parallelism
+Different writers can simultaneously modify different nodes in the ART tree because each node has its own independent CAS lock. Writer-1 acquiring a lock on Node-A does not prevent Writer-2 from acquiring a lock on Node-B, resulting in true parallel write operations on separate parts of the tree structure.
+
+9. MVCC Isolation Guarantee
+MVCCART maintains multiple versions of data through a linked snapshot chain where each transaction sees a consistent version of the entire database. Old snapshots remain accessible and unmodified even as new versions are created by writers, allowing readers at any version to proceed without interference.
+
+10. Non-Blocking Restart Strategy
+Instead of using condition variables or mutex waits that put threads to sleep, failed transactions simply restart their operation with the new version information. This optimistic approach eliminates costly context switches and keeps all threads actively working, resulting in better CPU utilization and throughput.
+
+11. Lock-Free Read Advantages
+Because readers acquire no locks and only validate versions after reading, the system experiences zero lock contention between readers and writers or among multiple readers. This allows the system to sustain high concurrent read throughput even while writers are actively modifying the tree structure.
+
+12. Comparison with Traditional Locking
+Traditional databases use pessimistic locking where readers acquire shared locks that block writers, causing contention and context switches. MVCCART's optimistic lock-free approach with CAS and snapshot isolation achieves higher throughput and lower latency by allowing readers to proceed concurrently with writers without any blocking.
+
+13. Epoch-Based Visibility Control
+Transactions are organized into epochs to determine which versions are visible to which transactions. An epoch acts as a logical barrier that ensures transactions within an epoch see consistent snapshots, while epoch advancement allows garbage collection of old versions that are no longer needed by any active transaction.
+
+14. High Concurrency Scalability
+MVCCART's concurrency model scales well with increasing numbers of threads because there is no central lock that all threads must contend for. Each node has its own atomic version field, and readers use no locks at all, allowing the system to maintain high performance even with dozens of concurrent reader and writer threads.
+
+15. Key Takeaway
+MVCCART achieves lock-free, wait-free concurrency through a combination of atomic CAS operations for writers, snapshot-based reads with optimistic validation for readers, and multi-version data structures that allow transactions to operate on consistent snapshots. This design eliminates blocking between readers and writers while providing strong isolation guarantees required for transactional consistency.
+
+
 Forked from http://github.com/armon/libart
 C++ wrapping,  C++11 primitives, Boost SmartPointers, threads and tests were used and also pfabric "core/Tuple.hpp"
 
