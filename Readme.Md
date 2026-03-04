@@ -1,3 +1,30 @@
+┌──────────────────────────────────────────────────────────┐
+│         MVCCART Concurrency Control Benefits             │
+├──────────────────────────────────────────────────────────┤
+│                                                          │
+│ 1. LOCK-FREE READS                                       │
+│    • No lock acquisition                                │
+│    • No blocking of writers                            │
+│    • Multiple readers concurrent                       │
+│                                                          │
+│ 2. NON-BLOCKING WRITES                                   │
+│    • CAS instead of mutex                              │
+│    • Restarts instead of waiting                       │
+│    • Parallel writes on different nodes                │
+│                                                          │
+│ 3. MVCC ISOLATION                                        │
+│    • Each transaction sees consistent snapshot         │
+│    • Old versions remain readable                      │
+│    • Writers don't invalidate readers                  │
+│                                                          │
+│ 4. HIGH THROUGHPUT                                       │
+│    • Zero context switches for lock waits              │
+│    • Optimistic validation > pessimistic locking       │
+│    • Scales well with many concurrent threads          │
+│                                                          │
+└──────────────────────────────────────────────────────────┘
+
+
 MVCCART Concurrency Control - Simplified Summary
 1. Transactional Framework
 Each transaction in MVCCART is a single independent thread that executes concurrently with other transactions. Every transaction receives a unique ID that is atomically generated, allowing the system to track and coordinate multiple concurrent operations across the database.
