@@ -81,4 +81,98 @@ https://github.com/umairsheikh/MVCCART/tree/master/CorrectnessTests
 https://github.com/umairsheikh/MVCCART/blob/master/WorkloadTests/
 
 
+Parallelism/Concurrency control:
+
+Based on my analysis of the MVCCART repository, here's how write parallelism and concurrency are carried out:
+
+Key Concurrency Mechanisms
+1. Transaction-Based Parallelism
+The system uses a transaction management framework where multiple writers run in parallel:
+
+umairsheikh / MVCCART / Transactions / transactionManager.h
+v1
+template <typename TransactionFunc, typename ARTContainer>
+class Transaction
+{
+public:
+    size_t  Tid;
+    boost::thread* TransactionThread;
+Each transaction gets its own Thread ID (Tid) and runs in a separate boost::thread.
+
+2. Optimistic Locking with Version Tracking
+The Adaptive Radix Tree (ART) nodes use version-based optimistic locking:
+
+umairsheikh / MVCCART / ART / ArtCPP.hpp
+v1
+typedef struct
+{
+    uint8_t type;
+    uint8_t num_children;
+    uint32_t partial_len;
+    unsigned char partial[MAX_PREFIX_LEN];
+64-bit atomic version field with:
+2 bits for type
+60 bits for version number
+1 bit for lock state
+1 bit for obsolete flag
+3. Compare-and-Swap (CAS) Operations
+Write operations use atomic CAS to upgrade locks without traditional mutexes:
+
+umairsheikh / MVCCART / ART / ArtCPP.hpp
+v2
+bool upgradeToWriteLockOrRestart(art_node* node, uint64_t& v, bool &needRestart)
+{
+    if (!node->version.compare_exchange_strong(v, v + 0b10)) 
+    {
+        v = v + 0b10;
+        needRestart = true;
+Writers attempt to acquire locks via CAS; if it fails, the transaction restarts.
+
+4. MVCC (Multi-Version Concurrency Control)
+The system maintains multiple versions of data:
+
+umairsheikh / MVCCART / mvcc / snapshot.hpp
+v1
+template <class ValueType>
+struct snapshot
+{
+    using value_type = ValueType;
+    
+    smart_ptr::shared_ptr<snapshot> _older_snapshot;
+Each write creates a new snapshot linked to older versions, allowing readers to access consistent older versions while writers create new ones.
+
+5. Global Epoch Management
+Transactions are organized into epochs for coordinated visibility:
+
+umairsheikh / MVCCART / Transactions / Epochs.hpp
+class Epoch
+{
+public:
+    int EpochId;
+    std::vector<size_t> TxnSet;
+    int counter;
+6. Atomic Transaction ID Generation
+Writers get unique transaction IDs atomically without blocking:
+
+umairsheikh / MVCCART / Transactions / transactionManager.h
+v2
+size_t get_new_transaction_ID()
+{
+    size_t Tid;
+    nextTid.fetch_add(1, boost::memory_order_relaxed);
+    Tid = nextTid.load(boost::memory_order_relaxed);
+    return Tid;
+Uses boost::atomic with relaxed memory ordering for high performance.
+
+Summary
+Write parallelism is achieved through:
+
+Lock-free transactions using optimistic locking and version numbers
+Compare-and-swap instead of blocking locks
+Multi-versioning allowing concurrent readers and writers
+Epoch-based isolation for transaction coordination
+Boost thread pool for parallel execution
+This approach allows multiple writers to proceed concurrently without blocking on traditional mutexes, using restarts when conflicts occur—a key pattern in high-performance concurrent data structures.
+
+
 
